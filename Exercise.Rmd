@@ -1,0 +1,146 @@
+---
+title: "Prediction of Activity Execution of Unilateral Dumbell Biceps Curl"
+author: "Sasikala"
+date: "20/07/2021"
+output: 
+  html_document: 
+    keep_md: yes
+---
+
+## INTRODUCTION
+This project aims to predict the Activity of how well it is executed with a young health participants of the unilateral dumbell biceps curl.The activity is classified into five different classes as a performance execution.Classe A represents outcome is exact as per specification,B represents throwing the elbows to the front ,class C represents lifting the dumbbell only halfway ,class D represents  lowering the dumbbell only halfway and class E represents throwing the hips to the front.To predict the variable Decision tree and Random Forest algorithm are used and for predicting the coursera quiz as well.
+
+## LOADING DATA SETS 
+```{r,echo=TRUE}
+Trainset <- read.csv(url("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"))
+Testquiz <- read.csv(url("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"))
+dim(Trainset) #Training data csv 
+dim(Testquiz) # Test data for prediction 
+```
+## DATA CLEANING
+The data sets in csv file has many NA columns,blank columns and other not needed columns which is not useful for implementing machine learning algorithm.So I have reduced columns from 160 to 53. 
+```{r,echo=TRUE}
+library(dplyr)
+data_Trainset <- Trainset %>% 
+  select(where(~!any(is.na(.)))) # Removing NA value columns
+Traindata <- data_Trainset[!sapply(data_Trainset, function(x) any(x == ""))]# Removing Blank
+Traindata1 <- select(Traindata,-c(1:7)) #Removing just names, etc columns
+dim(Traindata1)
+names(Traindata1)
+```
+```{r,echo=TRUE}
+library(dplyr)
+data_Testquiz <- Testquiz %>% 
+  select(where(~!any(is.na(.)))) # Removing NA value columns
+quizdata <- data_Testquiz[!sapply(data_Testquiz, function(x) any(x == ""))]# Removing Blank
+quizdata1 <- select(quizdata,-c(1:7))#Removing just names, etc columns
+dim(quizdata1)
+```
+Now the data has been cleaned and it is ready for partitioning,model building and performance prediction.
+
+## DATA SPLITTING
+
+To check the performance,we have to train the data.The training set data is the whole data set now,so we have segregate the data into training and testing samples from the Traindata1.70% for training and 30% for testing.
+
+```{r,echo=TRUE}
+set.seed(1234)# For reproducibility
+ind <- sample(2,nrow(Traindata1),replace=TRUE,prob = c(0.7,0.3))
+train <- Traindata1[ind==1,] #Samples for Training
+test <- Traindata1[ind==2,]  #Samples for Testing
+```
+
+## 1 IMPLEMENTING DECISION TREE
+The Decision Tree is the recursive partition algorithm,so the function rpart() is to be used and to plot rpart.plot() is used.
+
+```{r,echo=TRUE}
+library(rpart)
+library(rpart.plot)
+set.seed(123)
+Tree <- rpart(classe~.,data=train)
+rpart.plot(Tree,type=3)
+```
+
+### Model performance of Decision Tree
+
+ To check the performance,accuracy the confusion matrix is used. because it gives and validates sum of true positives and true negatives divided by the sum of(TP+TN+FP+FN).After implementing decision tree the accuracy of the model is 75.02%.Let,s implement other models and compare
+ 
+```{r,echo=TRUE}
+library(caret)
+
+set.seed(122)
+
+p <- predict(Tree,newdata=test,type="class")
+
+p1 <- confusionMatrix(p,as.factor(test$classe))
+p1
+
+```
+## 2 DECISION TREE WITH CROSS VALIDATION
+With CV i have given 10 parts and it repeats 5 times.The rpart has hyperparameter as CP which is shown in the figure as at 0.03 the model shows the accuracy.so i have tune the model in that way as tune length =3.But model has shown the accuracy of 49.65% which is not said to be good.Let's try with another model
+```{r,echo=TRUE}
+set.seed(135)
+library(caret)
+crossVal <- trainControl(method="repeatedcv",number=10,repeats=5)
+treeCV <- train(classe~.,data=train,method="rpart",trControl=crossVal,tuneLength=3)
+treeCV
+plot(treeCV)
+
+```
+
+### Model performance with Decision Tree Cross validation
+
+```{r,echo=TRUE}
+p2<- predict(treeCV,newdata = test,type = "raw")
+p3 <- confusionMatrix(p2,as.factor(test$classe))
+p3
+```
+## 3 IMPLEMENTING BAGGING(BOOTSTRAP AGGREGATING)
+For implementing bagging we have to use the method "treebag" and with cross validation.The roll_belt variable is the most important variable for prediction followed by yaw_belt and so on.The model performance is comparitively better and it has an accuracy of 98.7%
+
+```{r,echo=TRUE}
+set.seed(1351)
+library(caret)
+crossVal <- trainControl(method="repeatedcv",number=10,repeats=5)
+bag <- train(classe~.,data=train,method="treebag",trControl=crossVal,importance=TRUE)
+plot(varImp(bag),top=10)
+```
+
+### Model performance of Bagging
+
+```{r,echo=TRUE}
+p4<- predict(bag,newdata = test,type = "raw")
+p5<- confusionMatrix(p4,as.factor(test$classe))
+p5
+```
+## 4 IMPLEMENTING RANDOM FOREST METHOD
+By calling randomforest(),the model is implemented with crossvalidation with 3 parts.
+```{r,echo=TRUE}
+set.seed(12345)
+library(randomForest)
+forestCV <- trainControl(method="cv", number=3, verboseIter=FALSE)
+randomf <- train(classe ~ ., data=train, method="rf",
+                          trControl=forestCV,importance=TRUE)
+
+print(randomf$finalModel)
+
+```
+
+### OUT OF BAG Misclassification(Rf with CV)
+
+ The out of bag is the misclasification error rate which the random forest has done.Here,it is 0.63% ,that is 1-OOB is accuracy.So,the OOB is very small here and it is said to be a good fit.Since,it has less OOB and high accuracy which is 99.13% we can use this model for our quizdata.
+ 
+### Model performance of Random forest
+```{r,echo=TRUE}
+library(caret)
+p6 <- predict(randomf,test)
+p7 <- confusionMatrix(p6,as.factor(test$classe))
+p7
+```
+
+## 6 PREDICTION FOR TEST QUIZ DATA
+ By comparing all the models,the model with random Forest gives better accuracy as 99.13% when compared to all other methods.So, i have implemented Random Forest to predict the testquiz data.
+
+```{r,echo=TRUE}
+p8 <- predict(randomf,quizdata1)
+p8
+```
